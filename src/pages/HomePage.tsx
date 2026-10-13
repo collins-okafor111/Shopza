@@ -19,7 +19,7 @@ import {
   catUrbanFashionImg,
   catElectronicsImg,
   catHomeLivingImg,
-} from '../data/seedData';
+} from '../constants/marketplace';
 import { ProductCard } from '../components/marketplace/ProductCard';
 import { StoreCard } from '../components/marketplace/StoreCard';
 
@@ -226,11 +226,27 @@ export const HomePage: React.FC = () => {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {trendingProducts.map((product) => (
-              <ProductCard key={product.id} product={product} />
-            ))}
-          </div>
+          {trendingProducts.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {trendingProducts.map((product) => (
+                <ProductCard key={product.id} product={product} />
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-12 text-center">
+              <ShoppingBag className="w-10 h-10 text-slate-500 mx-auto mb-3" />
+              <h3 className="font-display text-base font-bold text-white">No products yet</h3>
+              <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                Be the first to list a product on SHOPZA. Connect with buyers nationwide.
+              </p>
+              <button
+                onClick={() => navigate('/seller/dashboard')}
+                className="mt-4 rounded-xl bg-[#5B35F5] px-4 py-2 text-xs font-bold text-white hover:bg-[#4d2ad4] transition cursor-pointer"
+              >
+                List a Product
+              </button>
+            </div>
+          )}
         </div>
       </section>
 
@@ -256,11 +272,27 @@ export const HomePage: React.FC = () => {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {featuredStores.map((store) => (
-              <StoreCard key={store.id} store={store} />
-            ))}
-          </div>
+          {featuredStores.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {featuredStores.map((store) => (
+                <StoreCard key={store.id} store={store} />
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-12 text-center">
+              <StoreIcon className="w-10 h-10 text-slate-500 mx-auto mb-3" />
+              <h3 className="font-display text-base font-bold text-white">No stores yet</h3>
+              <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                Be the first to open a verified digital storefront and reach thousands of shoppers.
+              </p>
+              <button
+                onClick={() => navigate('/seller/dashboard')}
+                className="mt-4 rounded-xl bg-[#00C896] px-4 py-2 text-xs font-bold text-slate-900 hover:brightness-110 transition cursor-pointer"
+              >
+                Create Storefront
+              </button>
+            </div>
+          )}
         </div>
       </section>
 

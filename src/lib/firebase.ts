@@ -24,6 +24,13 @@ import {
   getDocs,
   onSnapshot,
 } from 'firebase/firestore';
+import {
+  getStorage,
+  ref,
+  uploadBytesResumable,
+  getDownloadURL,
+  deleteObject,
+} from 'firebase/storage';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
@@ -32,6 +39,7 @@ const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
+export const storage = getStorage(app, firebaseConfig.storageBucket);
 
 export enum OperationType {
   CREATE = 'create',
@@ -110,5 +118,9 @@ export {
   where,
   getDocs,
   onSnapshot,
+  ref,
+  uploadBytesResumable,
+  getDownloadURL,
+  deleteObject,
 };
 export type { FirebaseUser };

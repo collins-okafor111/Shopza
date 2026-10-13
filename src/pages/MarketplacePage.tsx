@@ -19,7 +19,7 @@ import {
 import { useMarketplace } from '../context/MarketplaceContext';
 import { ProductCard } from '../components/marketplace/ProductCard';
 import { StarRating } from '../components/marketplace/StarRating';
-import { CATEGORIES_LIST } from '../data/seedData';
+import { CATEGORIES_LIST } from '../constants/marketplace';
 import { Store, Product } from '../types';
 
 export const MarketplacePage: React.FC<{

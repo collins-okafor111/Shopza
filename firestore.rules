@@ -135,5 +135,66 @@ service cloud.firestore {
     match /wishlists/{userId} {
       allow read, write: if isSignedIn() && (request.auth.uid == userId || isAdmin());
     }
+
+    // Reviews Collection (Public Feed, Authored by Real Users)
+    match /reviews/{reviewId} {
+      allow get, list: if true;
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
+      allow update, delete: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+    }
+
+    // Conversations Collection (Chat)
+    match /conversations/{conversationId} {
+      allow get, list: if isSignedIn() && (
+        resource == null ||
+        request.auth.uid in resource.data.participantIds ||
+        isAdmin()
+      );
+      allow create: if isSignedIn() && request.auth.uid in incoming().participantIds;
+      allow update: if isSignedIn() && (
+        request.auth.uid in resource.data.participantIds ||
+        isAdmin()
+      );
+      allow delete: if isAdmin();
+    }
+
+    // Messages Collection
+    match /messages/{messageId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() && incoming().senderId == request.auth.uid;
+      allow delete: if isAdmin();
+    }
+
+    // Notifications Collection
+    match /notifications/{notificationId} {
+      allow get, list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    // Services Collection
+    match /services/{serviceId} {
+      allow get, list: if true;
+      allow create, update, delete: if isSignedIn() && (incoming().sellerId == request.auth.uid || isAdmin());
+    }
+
+    // Transactions & Withdrawals
+    match /transactions/{transactionId} {
+      allow get, list: if isSignedIn() && (resource.data.sellerId == request.auth.uid || isAdmin());
+      allow create, update: if isAdmin();
+    }
+
+    match /withdrawals/{withdrawalId} {
+      allow get, list: if isSignedIn() && (resource.data.sellerId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && incoming().sellerId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // Reports Collection
+    match /reports/{reportId} {
+      allow get, list: if isAdmin();
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
+    }
   }
 }

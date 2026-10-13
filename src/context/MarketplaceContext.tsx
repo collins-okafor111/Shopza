@@ -22,21 +22,9 @@ import {
 } from '../types';
 import {
   INITIAL_CONFIG,
-  DEMO_USERS,
-  DEMO_STORES,
-  DEMO_PRODUCTS,
-  DEMO_SERVICES,
-  DEMO_REVIEWS,
-  DEMO_ORDERS,
-  DEMO_CONVERSATIONS,
-  DEMO_MESSAGES,
-  DEMO_NOTIFICATIONS,
-  DEMO_TRANSACTIONS,
-  DEMO_WITHDRAWALS,
-  DEMO_REPORTS,
-  INITIAL_DISCOUNTS,
-  INITIAL_CUSTOMERS,
-} from '../data/seedData';
+  KNOWN_DEMO_STORE_IDS,
+  KNOWN_DEMO_PRODUCT_IDS,
+} from '../constants/marketplace';
 import {
   auth,
   googleProvider,
@@ -51,6 +39,7 @@ import {
   getDoc,
   setDoc,
   updateDoc,
+  deleteDoc,
   collection,
   getDocs,
   onSnapshot,
@@ -494,7 +483,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
       role: isSellerAccount ? 'seller' : 'buyer',
       isSeller: isSellerAccount,
-      storeUsername: isSellerAccount ? cleanUsername : undefined,
+      ...(isSellerAccount ? { storeUsername: cleanUsername } : {}),
       location: 'Lagos, Nigeria',
       joinedDate: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
       isVerified: true,
@@ -638,7 +627,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
   // Shopify Discounts Engine
   const [discounts, setDiscounts] = useState<Discount[]>(() => {
     const saved = localStorage.getItem('shopza_discounts');
-    return saved ? JSON.parse(saved) : INITIAL_DISCOUNTS;
+    return saved ? JSON.parse(saved) : [];
   });
 
   const createDiscount = (d: Omit<Discount, 'id' | 'createdAt' | 'usedCount'>) => {
@@ -718,7 +707,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
   // Shopify Customers CRM
   const [customers, setCustomers] = useState<Customer[]>(() => {
     const saved = localStorage.getItem('shopza_customers');
-    return saved ? JSON.parse(saved) : INITIAL_CUSTOMERS;
+    return saved ? JSON.parse(saved) : [];
   });
 
   const addCustomer = (c: Omit<Customer, 'id' | 'createdAt'>) => {
@@ -834,29 +823,30 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   // Shared Central Store Registry
   const [stores, setStores] = useState<Store[]>(() => {
-    // Immediate fallback cache for instant first paint
     const saved = localStorage.getItem('shopza_stores');
-    if (!saved) return DEMO_STORES;
+    if (!saved) return [];
     try {
       const parsed: any[] = JSON.parse(saved);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.map((s) => ({
-          ...s,
-          storeId: s.storeId || s.id,
-          normalizedName: s.normalizedName || normalizeText(s.name),
-          status: s.status || 'open',
-          isPublic: s.isPublic !== undefined ? s.isPublic : true,
-          verificationStatus: s.verificationStatus || (s.isVerified ? 'verified' : 'unverified'),
-          categories: Array.isArray(s.categories)
-            ? s.categories
-            : s.category
-            ? [s.category]
-            : ['Fashion & Apparel'],
-        }));
+        return parsed
+          .filter((s) => !KNOWN_DEMO_STORE_IDS.includes(s.id))
+          .map((s) => ({
+            ...s,
+            storeId: s.storeId || s.id,
+            normalizedName: s.normalizedName || normalizeText(s.name),
+            status: s.status || 'open',
+            isPublic: s.isPublic !== undefined ? s.isPublic : true,
+            verificationStatus: s.verificationStatus || (s.isVerified ? 'verified' : 'unverified'),
+            categories: Array.isArray(s.categories)
+              ? s.categories
+              : s.category
+              ? [s.category]
+              : ['Fashion & Apparel'],
+          }));
       }
-      return DEMO_STORES;
+      return [];
     } catch {
-      return DEMO_STORES;
+      return [];
     }
   });
 
@@ -869,7 +859,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
         const firestoreStores: Store[] = [];
         snapshot.forEach((docSnap) => {
           const data = docSnap.data() as any;
-          if (data && data.name) {
+          if (data && data.name && !KNOWN_DEMO_STORE_IDS.includes(docSnap.id)) {
             firestoreStores.push({
               ...data,
               id: docSnap.id || data.id,
@@ -919,26 +909,8 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
           }
         });
 
-        if (firestoreStores.length > 0) {
-          // If Firestore has stores, use the shared Firestore stores registry as the absolute source of truth.
-          // In case demo stores exist locally but not yet in Firestore, keep real stores first.
-          // Filter out demo stores that might collide or shadow real store names/usernames.
-          const firestoreUsernames = new Set(firestoreStores.map((s) => s.username.toLowerCase()));
-          const firestoreNames = new Set(firestoreStores.map((s) => normalizeText(s.name)));
-
-          const nonCollidingDemo = DEMO_STORES.filter(
-            (ds) =>
-              !firestoreUsernames.has(ds.username.toLowerCase()) &&
-              !firestoreNames.has(normalizeText(ds.name))
-          );
-
-          const unified = [...firestoreStores, ...nonCollidingDemo];
-          setStores(unified);
-          localStorage.setItem('shopza_stores', JSON.stringify(unified));
-        } else {
-          // If Firestore has no stores yet (e.g. brand new project), fallback to initial seed
-          setStores(DEMO_STORES);
-        }
+        setStores(firestoreStores);
+        localStorage.setItem('shopza_stores', JSON.stringify(firestoreStores));
       },
       (error) => {
         console.warn('Real-time Firestore stores listener notice:', error);
@@ -950,7 +922,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const [followedStores, setFollowedStores] = useState<string[]>(() => {
     const saved = localStorage.getItem('shopza_followed_stores');
-    return saved ? JSON.parse(saved) : ['urban-threads', 'techzone-ng'];
+    return saved ? JSON.parse(saved) : [];
   });
 
   const getStoreByUsername = (username: string) => {
@@ -1086,7 +1058,6 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       followerCount: 0,
       isVerified: false, // Genuine verification: newly launched stores start unverified until audited
       verificationStatus: 'unverified',
-      verificationBadgeType: undefined,
       status: 'open',
       isPublic: true,
       createdAt: timestamp,
@@ -1190,8 +1161,42 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
   // Products
   const [products, setProducts] = useState<Product[]>(() => {
     const saved = localStorage.getItem('shopza_products');
-    return saved ? JSON.parse(saved) : DEMO_PRODUCTS;
+    if (!saved) return [];
+    try {
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed)
+        ? parsed.filter((p) => !KNOWN_DEMO_PRODUCT_IDS.includes(p.id))
+        : [];
+    } catch {
+      return [];
+    }
   });
+
+  // Real-time Firestore sync for all accounts and sessions: products/{productId}
+  useEffect(() => {
+    const productsColRef = collection(db, 'products');
+    const unsubscribe = onSnapshot(
+      productsColRef,
+      (snapshot) => {
+        const cloudProducts: Product[] = [];
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data() as any;
+          if (data && data.title && !KNOWN_DEMO_PRODUCT_IDS.includes(docSnap.id)) {
+            cloudProducts.push({
+              ...data,
+              id: docSnap.id || data.id,
+            });
+          }
+        });
+        setProducts(cloudProducts);
+        localStorage.setItem('shopza_products', JSON.stringify(cloudProducts));
+      },
+      (error) => {
+        console.warn('Real-time Firestore products listener notice:', error);
+      }
+    );
+    return () => unsubscribe();
+  }, []);
 
   const getProductById = (id: string) => products.find((p) => p.id === id);
   const getProductBySlug = (slug: string) => products.find((p) => p.slug === slug || p.id === slug);
@@ -1205,9 +1210,21 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    const updated = [newProduct, ...products];
+    const updated = [newProduct, ...products.filter((p) => p.id !== newProduct.id)];
     setProducts(updated);
     localStorage.setItem('shopza_products', JSON.stringify(updated));
+
+    // Save to Firestore
+    try {
+      const cleanProduct = Object.fromEntries(
+        Object.entries(newProduct).filter(([_, v]) => v !== undefined)
+      );
+      setDoc(doc(db, 'products', newProduct.id), cleanProduct).catch((err) =>
+        console.error('Failed to write product to Firestore:', err)
+      );
+    } catch (e) {
+      console.warn('Error saving product to Firestore:', e);
+    }
 
     // Update store count
     setStores((prev) =>
@@ -1236,6 +1253,19 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       localStorage.setItem('shopza_products', JSON.stringify(updated));
       return updated;
     });
+
+    // Update in Firestore
+    try {
+      const cleanUpdate = Object.fromEntries(
+        Object.entries(data).filter(([_, v]) => v !== undefined)
+      );
+      updateDoc(doc(db, 'products', productId), {
+        ...cleanUpdate,
+        updatedAt: new Date().toISOString(),
+      }).catch((err) => console.error('Failed to update product in Firestore:', err));
+    } catch (e) {
+      console.warn('Error updating product in Firestore:', e);
+    }
 
     if (triggeredPriceDrop && dropProd) {
       const p = dropProd as Product;
@@ -1276,6 +1306,16 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       }
       return updated;
     });
+
+    // Delete in Firestore
+    try {
+      deleteDoc(doc(db, 'products', productId)).catch((err: any) =>
+        console.error('Failed to delete product from Firestore:', err)
+      );
+    } catch (e) {
+      console.warn('Error deleting product from Firestore:', e);
+    }
+
     addToast('info', 'Product listing removed');
   };
 
@@ -1293,6 +1333,19 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const updated = [duplicated, ...products];
     setProducts(updated);
     localStorage.setItem('shopza_products', JSON.stringify(updated));
+
+    // Save duplicated to Firestore
+    try {
+      const cleanProduct = Object.fromEntries(
+        Object.entries(duplicated).filter(([_, v]) => v !== undefined)
+      );
+      setDoc(doc(db, 'products', duplicated.id), cleanProduct).catch((err) =>
+        console.error('Failed to write cloned product to Firestore:', err)
+      );
+    } catch (e) {
+      console.warn('Error saving duplicate product to Firestore:', e);
+    }
+
     addToast('success', 'Product Cloned', `Duplicate created: "${duplicated.title}"`);
     return duplicated;
   };
@@ -1305,7 +1358,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
   // Services
   const [services, setServices] = useState<ServiceItem[]>(() => {
     const saved = localStorage.getItem('shopza_services');
-    return saved ? JSON.parse(saved) : DEMO_SERVICES;
+    return saved ? JSON.parse(saved) : [];
   });
 
   const addService = (serviceData: Omit<ServiceItem, 'id'>) => {
@@ -1546,7 +1599,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
   // Orders
   const [orders, setOrders] = useState<Order[]>(() => {
     const saved = localStorage.getItem('shopza_orders');
-    return saved ? JSON.parse(saved) : DEMO_ORDERS;
+    return saved ? JSON.parse(saved) : [];
   });
 
   const getOrderById = (orderId: string) => orders.find((o) => o.id === orderId || o.orderNumber === orderId);
@@ -1647,12 +1700,12 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
   // Messages & Conversations
   const [conversations, setConversations] = useState<Conversation[]>(() => {
     const saved = localStorage.getItem('shopza_conversations');
-    return saved ? JSON.parse(saved) : DEMO_CONVERSATIONS;
+    return saved ? JSON.parse(saved) : [];
   });
 
   const [messages, setMessages] = useState<Message[]>(() => {
     const saved = localStorage.getItem('shopza_messages');
-    return saved ? JSON.parse(saved) : DEMO_MESSAGES;
+    return saved ? JSON.parse(saved) : [];
   });
 
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
@@ -1743,13 +1796,11 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
   };
 
   const startStoreChat = (store: Store) => {
-    const current = currentUser || {
-      id: 'user-buyer-1',
-      name: 'David Adeleke',
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
-      username: 'davidadeleke',
-      role: 'buyer' as const,
-    };
+    if (!currentUser) {
+      setAuthModalOpen(true);
+      return '';
+    }
+    const current = currentUser;
 
     const existing = conversations.find(
       (c) =>
@@ -1841,7 +1892,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
   // Notifications
   const [notifications, setNotifications] = useState<Notification[]>(() => {
     const saved = localStorage.getItem('shopza_notifications');
-    return saved ? JSON.parse(saved) : DEMO_NOTIFICATIONS;
+    return saved ? JSON.parse(saved) : [];
   });
 
   const markNotificationRead = (id: string) => {
@@ -1861,7 +1912,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
   // Reviews
   const [reviews, setReviews] = useState<Review[]>(() => {
     const saved = localStorage.getItem('shopza_reviews');
-    return saved ? JSON.parse(saved) : DEMO_REVIEWS;
+    return saved ? JSON.parse(saved) : [];
   });
 
   const addReview = (reviewData: Omit<Review, 'id' | 'createdAt'>) => {
@@ -1924,10 +1975,10 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
   };
 
   // Financials & Withdrawals
-  const [transactions] = useState<Transaction[]>(DEMO_TRANSACTIONS);
+  const [transactions] = useState<Transaction[]>([]);
   const [withdrawals, setWithdrawals] = useState<WithdrawalRequest[]>(() => {
     const saved = localStorage.getItem('shopza_withdrawals');
-    return saved ? JSON.parse(saved) : DEMO_WITHDRAWALS;
+    return saved ? JSON.parse(saved) : [];
   });
 
   const getSellerBalance = (sellerId: string) => {
@@ -2005,7 +2056,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
   // Moderation & Reports
   const [reports, setReports] = useState<Report[]>(() => {
     const saved = localStorage.getItem('shopza_reports');
-    return saved ? JSON.parse(saved) : DEMO_REPORTS;
+    return saved ? JSON.parse(saved) : [];
   });
 
   const submitReport = (reportData: any) => {

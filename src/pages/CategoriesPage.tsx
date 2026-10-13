@@ -1,6 +1,6 @@
 import React from 'react';
 import { useMarketplace } from '../context/MarketplaceContext';
-import { CATEGORIES_LIST } from '../data/seedData';
+import { CATEGORIES_LIST } from '../constants/marketplace';
 import { ProductCard } from '../components/marketplace/ProductCard';
 
 export const CategoriesPage: React.FC = () => {
