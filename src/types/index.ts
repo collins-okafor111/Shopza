@@ -186,6 +186,8 @@ export interface Store {
     accountName: string;
   };
   themeSettings?: StoreThemeSettings;
+  badges?: string[];
+  socialLinks?: Record<string, string>;
 }
 
 export interface CartItem {

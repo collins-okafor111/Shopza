@@ -78,7 +78,7 @@ export const SellerPromotionsPage: React.FC<{ navigate: (path: string) => void }
       minOrderValue: Number(minOrderValue) || 0,
       usageLimit: Number(usageLimit) || 100,
       active: true,
-      storeId: userStore.id,
+      storeId: userStore?.id || 'store-promos',
     });
 
     setIsAddDiscountModalOpen(false);

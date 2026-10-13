@@ -43,6 +43,7 @@ import {
   signInWithPopup,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
   firebaseSignOut,
   onAuthStateChanged,
   db,
@@ -73,10 +74,12 @@ interface MarketplaceContextType {
   authLoading: boolean;
   authModalOpen: boolean;
   setAuthModalOpen: (open: boolean) => void;
+  authModalMode: 'login' | 'signup';
   openAuthModal: (mode?: 'login' | 'signup') => void;
   signInWithGoogle: () => Promise<void>;
   signInWithEmail: (email: string, pass: string) => Promise<void>;
   signUpWithEmail: (email: string, pass: string, name: string, isSeller?: boolean, storeName?: string) => Promise<void>;
+  sendPasswordReset: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
   updateUserProfile: (data: Partial<User>) => void;
   switchDemoRole: (role: 'buyer' | 'seller_fashion' | 'seller_tech' | 'admin' | 'guest') => void;
@@ -291,6 +294,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
   // Auth & Mass Users
   const [authLoading, setAuthLoading] = useState<boolean>(true);
   const [authModalOpen, setAuthModalOpen] = useState<boolean>(false);
+  const [authModalMode, setAuthModalMode] = useState<'login' | 'signup'>('login');
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     const saved = localStorage.getItem('shopza_user');
     return saved ? JSON.parse(saved) : null;
@@ -307,12 +311,12 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
             setCurrentUser(data);
             localStorage.setItem('shopza_user', JSON.stringify(data));
           } else {
+            const fallbackName = fbUser.displayName || fbUser.email?.split('@')[0] || 'User';
+            const cleanUsername = (fallbackName).toLowerCase().replace(/[^a-z0-9]/g, '') || `user_${fbUser.uid.slice(0, 5)}`;
             const newUser: User = {
               id: fbUser.uid,
-              name: fbUser.displayName || fbUser.email?.split('@')[0] || 'User',
-              username: (fbUser.displayName || fbUser.email?.split('@')[0] || 'user')
-                .toLowerCase()
-                .replace(/[^a-z0-9]/g, ''),
+              name: fallbackName,
+              username: cleanUsername,
               email: fbUser.email || '',
               avatar:
                 fbUser.photoURL ||
@@ -323,18 +327,33 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
               joinedDate: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
               isVerified: true,
             };
-            await setDoc(userRef, newUser);
+            try {
+              await setDoc(userRef, newUser);
+            } catch (err) {
+              console.warn('Could not write fallback user to Firestore:', err);
+            }
             setCurrentUser(newUser);
             localStorage.setItem('shopza_user', JSON.stringify(newUser));
           }
         } catch (e) {
           console.error('Firestore user profile sync error:', e);
+          const fallbackUser: User = {
+            id: fbUser.uid,
+            name: fbUser.displayName || fbUser.email?.split('@')[0] || 'User',
+            username: (fbUser.displayName || fbUser.email?.split('@')[0] || 'user').toLowerCase().replace(/[^a-z0-9]/g, '') || `user_${fbUser.uid.slice(0, 5)}`,
+            email: fbUser.email || '',
+            avatar: fbUser.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+            role: 'buyer',
+            isSeller: false,
+            location: 'Lagos, Nigeria',
+            joinedDate: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+            isVerified: true,
+          };
+          setCurrentUser(fallbackUser);
         }
       } else {
-        const saved = localStorage.getItem('shopza_user');
-        if (!saved) {
-          setCurrentUser(null);
-        }
+        setCurrentUser(null);
+        localStorage.removeItem('shopza_user');
       }
       setAuthLoading(false);
     });
@@ -342,7 +361,8 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     return () => unsubscribe();
   }, []);
 
-  const openAuthModal = (_mode: 'login' | 'signup' = 'login') => {
+  const openAuthModal = (mode: 'login' | 'signup' = 'login') => {
+    setAuthModalMode(mode);
     setAuthModalOpen(true);
   };
 
@@ -350,43 +370,106 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const res = await signInWithPopup(auth, googleProvider);
     const fbUser = res.user;
     const userRef = doc(db, 'users', fbUser.uid);
-    const snap = await getDoc(userRef);
-    if (!snap.exists()) {
-      const newUser: User = {
+    try {
+      const snap = await getDoc(userRef);
+      if (!snap.exists()) {
+        const fallbackName = fbUser.displayName || fbUser.email?.split('@')[0] || 'User';
+        const cleanUsername = fallbackName.toLowerCase().replace(/[^a-z0-9]/g, '') || `user_${fbUser.uid.slice(0, 5)}`;
+        const newUser: User = {
+          id: fbUser.uid,
+          name: fallbackName,
+          username: cleanUsername,
+          email: fbUser.email || '',
+          avatar:
+            fbUser.photoURL ||
+            'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+          role: 'buyer',
+          isSeller: false,
+          location: 'Lagos, Nigeria',
+          joinedDate: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+          isVerified: true,
+        };
+        try {
+          await setDoc(userRef, newUser);
+        } catch (setErr) {
+          console.warn('Could not set Google user in Firestore:', setErr);
+        }
+        setCurrentUser(newUser);
+        localStorage.setItem('shopza_user', JSON.stringify(newUser));
+      } else {
+        const existing = snap.data() as User;
+        setCurrentUser(existing);
+        localStorage.setItem('shopza_user', JSON.stringify(existing));
+      }
+    } catch (err) {
+      console.warn('Google sign-in profile warning:', err);
+      const fallbackUser: User = {
         id: fbUser.uid,
         name: fbUser.displayName || fbUser.email?.split('@')[0] || 'User',
-        username: (fbUser.displayName || fbUser.email?.split('@')[0] || 'user')
-          .toLowerCase()
-          .replace(/[^a-z0-9]/g, ''),
+        username: (fbUser.displayName || fbUser.email?.split('@')[0] || 'user').toLowerCase().replace(/[^a-z0-9]/g, '') || `user_${fbUser.uid.slice(0, 5)}`,
         email: fbUser.email || '',
-        avatar:
-          fbUser.photoURL ||
-          'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+        avatar: fbUser.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
         role: 'buyer',
         isSeller: false,
         location: 'Lagos, Nigeria',
         joinedDate: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
         isVerified: true,
       };
-      await setDoc(userRef, newUser);
-      setCurrentUser(newUser);
-      localStorage.setItem('shopza_user', JSON.stringify(newUser));
-    } else {
-      const existing = snap.data() as User;
-      setCurrentUser(existing);
-      localStorage.setItem('shopza_user', JSON.stringify(existing));
+      setCurrentUser(fallbackUser);
+      localStorage.setItem('shopza_user', JSON.stringify(fallbackUser));
     }
   };
 
   const signInWithEmail = async (email: string, pass: string) => {
-    const res = await signInWithEmailAndPassword(auth, email, pass);
+    const cleanEmail = email.trim().toLowerCase();
+    const res = await signInWithEmailAndPassword(auth, cleanEmail, pass);
     const fbUser = res.user;
     const userRef = doc(db, 'users', fbUser.uid);
-    const snap = await getDoc(userRef);
-    if (snap.exists()) {
-      const existing = snap.data() as User;
-      setCurrentUser(existing);
-      localStorage.setItem('shopza_user', JSON.stringify(existing));
+    try {
+      const snap = await getDoc(userRef);
+      if (snap.exists()) {
+        const existing = snap.data() as User;
+        setCurrentUser(existing);
+        localStorage.setItem('shopza_user', JSON.stringify(existing));
+      } else {
+        const fallbackName = fbUser.displayName || cleanEmail.split('@')[0] || 'User';
+        const cleanUsername = fallbackName.toLowerCase().replace(/[^a-z0-9]/g, '') || `user_${fbUser.uid.slice(0, 5)}`;
+        const newUser: User = {
+          id: fbUser.uid,
+          name: fallbackName,
+          username: cleanUsername,
+          email: cleanEmail,
+          avatar: fbUser.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+          role: 'buyer',
+          isSeller: false,
+          location: 'Lagos, Nigeria',
+          joinedDate: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+          isVerified: true,
+        };
+        try {
+          await setDoc(userRef, newUser);
+        } catch (setErr) {
+          console.warn('Could not set new user doc in Firestore:', setErr);
+        }
+        setCurrentUser(newUser);
+        localStorage.setItem('shopza_user', JSON.stringify(newUser));
+      }
+    } catch (profileErr) {
+      console.warn('User profile sync on login warning:', profileErr);
+      const fallbackUser: User = {
+        id: fbUser.uid,
+        name: fbUser.displayName || cleanEmail.split('@')[0] || 'User',
+        username: cleanEmail.split('@')[0]?.toLowerCase().replace(/[^a-z0-9]/g, '') || `user_${fbUser.uid.slice(0, 5)}`,
+        email: cleanEmail,
+        avatar: fbUser.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+        role: 'buyer',
+        isSeller: false,
+        location: 'Lagos, Nigeria',
+        joinedDate: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+        isVerified: true,
+      };
+      setCurrentUser(fallbackUser);
+      localStorage.setItem('shopza_user', JSON.stringify(fallbackUser));
     }
   };
 
@@ -397,15 +480,17 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     isSellerAccount = false,
     storeName = ''
   ) => {
-    const res = await createUserWithEmailAndPassword(auth, email, pass);
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanName = name.trim() || 'User';
+    const res = await createUserWithEmailAndPassword(auth, cleanEmail, pass);
     const fbUser = res.user;
-    const cleanUsername = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const cleanUsername = cleanName.toLowerCase().replace(/[^a-z0-9]/g, '') || `user_${fbUser.uid.slice(0, 5)}`;
 
     const newUser: User = {
       id: fbUser.uid,
-      name,
-      username: cleanUsername || `user_${Date.now().toString().slice(-4)}`,
-      email,
+      name: cleanName,
+      username: cleanUsername,
+      email: cleanEmail,
       avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
       role: isSellerAccount ? 'seller' : 'buyer',
       isSeller: isSellerAccount,
@@ -416,20 +501,28 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     };
 
     const userRef = doc(db, 'users', fbUser.uid);
-    await setDoc(userRef, newUser);
+    try {
+      await setDoc(userRef, newUser);
+    } catch (err) {
+      console.warn('Error saving user profile on signup:', err);
+    }
     setCurrentUser(newUser);
     localStorage.setItem('shopza_user', JSON.stringify(newUser));
 
     if (isSellerAccount) {
+      const finalStoreName = storeName.trim() || `${cleanName}'s Store`;
+      const normalizedName = finalStoreName.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
       const newStore: Store = {
         id: `store-${fbUser.uid}`,
-        name: storeName || `${name}'s Store`,
+        storeId: `store-${fbUser.uid}`,
+        name: finalStoreName,
+        normalizedName,
         username: cleanUsername,
         ownerId: fbUser.uid,
-        ownerName: name,
+        ownerName: cleanName,
         logo: 'https://images.unsplash.com/photo-1512436991641-6745cdb1723f?w=200&auto=format&fit=crop&q=80',
         banner: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=1200&auto=format&fit=crop&q=80',
-        description: `Official digital storefront for ${storeName || name}. Verified seller with nationwide dispatch.`,
+        description: `Official digital storefront for ${finalStoreName}. Verified seller with nationwide dispatch.`,
         categories: ['Fashion & Apparel', 'Tech & Electronics'],
         location: 'Lagos, Nigeria',
         state: 'Lagos',
@@ -437,6 +530,9 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
         reviewCount: 0,
         followerCount: 0,
         isVerified: true,
+        verificationStatus: 'verified',
+        status: 'open',
+        isPublic: true,
         joinedDate: 'Just now',
         responseTime: '< 15 mins',
         operatingHours: 'Mon - Sat, 8:00 AM - 7:00 PM',
@@ -450,17 +546,21 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
         themeSettings: {
           primaryColor: '#5B35F5',
           announcementBarEnabled: true,
-          announcementBarText: `Welcome to ${storeName || name}'s Store! Nationwide Delivery Available ✨`,
+          announcementBarText: `Welcome to ${finalStoreName}! Nationwide Delivery Available ✨`,
           bannerStyle: 'full_bleed',
           fontFamily: 'Plus Jakarta Sans',
           gridDensity: 'spacious',
           showBadges: true,
           whatsappChatEnabled: true,
         },
+        badges: ['verified_seller', 'fast_dispatch', 'buyer_protection'],
+        socialLinks: {},
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
 
       setStores((prev) => {
-        const updated = [newStore, ...prev];
+        const updated = [newStore, ...prev.filter(s => s.id !== newStore.id)];
         localStorage.setItem('shopza_stores', JSON.stringify(updated));
         return updated;
       });
@@ -468,9 +568,14 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       try {
         await setDoc(doc(db, 'stores', newStore.id), newStore);
       } catch (err) {
-        console.error('Store Firestore error:', err);
+        console.error('Store Firestore error on signup:', err);
       }
     }
+  };
+
+  const sendPasswordReset = async (email: string) => {
+    const cleanEmail = email.trim().toLowerCase();
+    await sendPasswordResetEmail(auth, cleanEmail);
   };
 
   const signOut = async () => {
@@ -1988,10 +2093,12 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
         authLoading,
         authModalOpen,
         setAuthModalOpen,
+        authModalMode,
         openAuthModal,
         signInWithGoogle,
         signInWithEmail,
         signUpWithEmail,
+        sendPasswordReset,
         signOut,
         updateUserProfile,
         switchDemoRole,

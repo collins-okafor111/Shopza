@@ -10,6 +10,8 @@ import {
   AlertCircle,
   Loader2,
   Sparkles,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 
 interface AuthModalProps {
@@ -28,9 +30,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [mode, setMode] = useState<'login' | 'signup'>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [name, setName] = useState('');
   const [isSellerAccount, setIsSellerAccount] = useState(false);
   const [storeName, setStoreName] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -59,41 +64,66 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     e.preventDefault();
     setErrorMessage(null);
 
-    if (!email || !password) {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || !password) {
       setErrorMessage('Please enter both email and password.');
       return;
     }
 
-    if (mode === 'signup' && !name) {
-      setErrorMessage('Please enter your full name.');
+    if (password.length < 6) {
+      setErrorMessage('Password must be at least 6 characters long.');
       return;
+    }
+
+    if (mode === 'signup') {
+      if (!name.trim()) {
+        setErrorMessage('Please enter your full name.');
+        return;
+      }
+      if (password !== confirmPassword) {
+        setErrorMessage('Passwords do not match. Please ensure both passwords match.');
+        return;
+      }
     }
 
     setIsLoading(true);
     try {
       if (mode === 'login') {
-        await signInWithEmail(email.trim(), password);
+        await signInWithEmail(cleanEmail, password);
         addToast('success', 'Welcome Back', 'Successfully signed in to your account.');
       } else {
         await signUpWithEmail(
-          email.trim(),
+          cleanEmail,
           password,
           name.trim(),
           isSellerAccount,
           storeName.trim()
         );
-        addToast('success', 'Account Created', 'Welcome to SHOPZA!');
+        addToast('success', 'Account Created', 'Welcome to SHOPZA! Your account is active.');
       }
       onClose();
     } catch (err: any) {
       console.error('Email Auth Error:', err);
       let msg = err.message || 'Authentication failed. Please verify your credentials.';
-      if (msg.includes('user-not-found') || msg.includes('wrong-password') || msg.includes('invalid-credential')) {
-        msg = 'Invalid email or password. Please check your details.';
-      } else if (msg.includes('email-already-in-use')) {
-        msg = 'An account with this email already exists. Try signing in.';
-      } else if (msg.includes('weak-password')) {
+      const code = err.code || '';
+      if (
+        code.includes('invalid-credential') ||
+        code.includes('wrong-password') ||
+        msg.includes('invalid-credential') ||
+        msg.includes('wrong-password') ||
+        msg.includes('invalid-login-credentials')
+      ) {
+        msg = 'Incorrect password or email. Please enter the exact password you used when creating your account.';
+      } else if (code.includes('user-not-found') || msg.includes('user-not-found')) {
+        msg = 'No account found with this email. Please switch to Create Account to register.';
+      } else if (code.includes('email-already-in-use') || msg.includes('email-already-in-use')) {
+        msg = 'An account with this email already exists. Try signing in with your password.';
+      } else if (code.includes('weak-password') || msg.includes('weak-password')) {
         msg = 'Password should be at least 6 characters long.';
+      } else if (code.includes('invalid-email') || msg.includes('invalid-email')) {
+        msg = 'Please enter a valid email address.';
+      } else if (code.includes('too-many-requests') || msg.includes('too-many-requests')) {
+        msg = 'Too many failed login attempts. Please try again later.';
       }
       setErrorMessage(msg);
     } finally {
@@ -221,21 +251,65 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
           <div>
             <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-              Password
+              {mode === 'login' ? 'Password' : 'Create Password'}
             </label>
             <div className="relative">
               <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••••••"
                 required
                 minLength={6}
-                className="w-full rounded-xl bg-white/5 border border-white/10 pl-10 pr-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#5B35F5] transition"
+                className="w-full rounded-xl bg-white/5 border border-white/10 pl-10 pr-10 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#5B35F5] transition"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3.5 top-3 text-slate-400 hover:text-slate-200 cursor-pointer"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
+            {mode === 'login' && (
+              <p className="text-[10px] text-slate-500 mt-1">
+                Enter the exact password you used when creating your account.
+              </p>
+            )}
           </div>
+
+          {mode === 'signup' && (
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                Confirm Password
+              </label>
+              <div className="relative">
+                <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="••••••••••••"
+                  required
+                  minLength={6}
+                  className="w-full rounded-xl bg-white/5 border border-white/10 pl-10 pr-10 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#5B35F5] transition"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3.5 top-3 text-slate-400 hover:text-slate-200 cursor-pointer"
+                >
+                  {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              {confirmPassword && password !== confirmPassword ? (
+                <p className="text-[10px] text-rose-400 mt-1">Passwords do not match.</p>
+              ) : confirmPassword && password === confirmPassword ? (
+                <p className="text-[10px] text-[#00C896] mt-1">Passwords match.</p>
+              ) : null}
+            </div>
+          )}
 
           {mode === 'signup' && (
             <div className="pt-1">

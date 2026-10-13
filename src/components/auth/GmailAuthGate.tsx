@@ -20,15 +20,23 @@ import {
 } from 'lucide-react';
 
 export const GmailAuthGate: React.FC = () => {
-  const { signInWithGoogle, signInWithEmail, signUpWithEmail, addToast } = useMarketplace();
+  const { signInWithGoogle, signInWithEmail, signUpWithEmail, sendPasswordReset, addToast } = useMarketplace();
 
-  const [mode, setMode] = useState<'login' | 'signup' | 'forgot'>('login');
+  const [mode, setMode] = useState<'login' | 'signup' | 'forgot'>(() => {
+    if (typeof window !== 'undefined') {
+      if (window.location.pathname === '/signup') return 'signup';
+      if (window.location.pathname === '/forgot-password') return 'forgot';
+    }
+    return 'login';
+  });
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [name, setName] = useState('');
   const [isSellerAccount, setIsSellerAccount] = useState(false);
   const [storeName, setStoreName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [resetSuccess, setResetSuccess] = useState(false);
@@ -59,33 +67,51 @@ export const GmailAuthGate: React.FC = () => {
 
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail) {
-      setErrorMessage('Please enter your Gmail address.');
+      setErrorMessage('Please enter your email or Gmail address.');
       return;
     }
 
     if (mode === 'forgot') {
       setIsLoading(true);
-      setTimeout(() => {
-        setIsLoading(false);
+      try {
+        await sendPasswordReset(cleanEmail);
         setResetSuccess(true);
         addToast('info', 'Password Reset Dispatched', `Recovery instructions sent to ${cleanEmail}`);
-      }, 700);
+      } catch (resetErr: any) {
+        console.error('Password reset error:', resetErr);
+        const code = resetErr?.code || '';
+        let resetMsg = resetErr?.message || 'Unable to send password reset email.';
+        if (code.includes('user-not-found') || resetMsg.includes('user-not-found')) {
+          resetMsg = 'No registered account found with this email.';
+        } else if (code.includes('invalid-email') || resetMsg.includes('invalid-email')) {
+          resetMsg = 'Please enter a valid email address.';
+        }
+        setErrorMessage(resetMsg);
+      } finally {
+        setIsLoading(false);
+      }
       return;
     }
 
     if (!password) {
-      setErrorMessage('Please enter your Gmail password.');
+      setErrorMessage('Please enter your password.');
       return;
     }
 
     if (password.length < 6) {
-      setErrorMessage('Password must be at least 6 characters.');
+      setErrorMessage('Password must be at least 6 characters long.');
       return;
     }
 
-    if (mode === 'signup' && !name.trim()) {
-      setErrorMessage('Please enter your full name.');
-      return;
+    if (mode === 'signup') {
+      if (!name.trim()) {
+        setErrorMessage('Please enter your full name.');
+        return;
+      }
+      if (password !== confirmPassword) {
+        setErrorMessage('Passwords do not match. Please ensure both passwords match.');
+        return;
+      }
     }
 
     setIsLoading(true);
@@ -101,24 +127,30 @@ export const GmailAuthGate: React.FC = () => {
           isSellerAccount,
           storeName.trim()
         );
-        addToast('success', 'Account Registered', 'Welcome to SHOPZA! Your account is ready for mass use.');
+        addToast('success', 'Account Registered', 'Welcome to SHOPZA! Your account is active.');
       }
     } catch (err: any) {
       console.error('Auth error:', err);
       let msg = err.message || 'Authentication error. Please check your credentials.';
+      const code = err.code || '';
       if (
-        msg.includes('user-not-found') ||
-        msg.includes('wrong-password') ||
+        code.includes('invalid-credential') ||
+        code.includes('wrong-password') ||
         msg.includes('invalid-credential') ||
+        msg.includes('wrong-password') ||
         msg.includes('invalid-login-credentials')
       ) {
-        msg = 'Invalid Gmail or password. If you are new to the platform, click "Create Account" below to register.';
-      } else if (msg.includes('email-already-in-use')) {
-        msg = 'An account with this Gmail address already exists. Please sign in instead.';
-      } else if (msg.includes('weak-password')) {
+        msg = 'Incorrect password or email. Please enter the exact password you used when creating your account.';
+      } else if (code.includes('user-not-found') || msg.includes('user-not-found')) {
+        msg = 'No account found with this email. Please switch to "Create Account" above to register.';
+      } else if (code.includes('email-already-in-use') || msg.includes('email-already-in-use')) {
+        msg = 'An account with this email address already exists. Please log in with your password.';
+      } else if (code.includes('weak-password') || msg.includes('weak-password')) {
         msg = 'Password is too weak. Please use at least 6 characters.';
-      } else if (msg.includes('invalid-email')) {
+      } else if (code.includes('invalid-email') || msg.includes('invalid-email')) {
         msg = 'Please enter a valid email address (e.g. name@gmail.com).';
+      } else if (code.includes('too-many-requests') || msg.includes('too-many-requests')) {
+        msg = 'Too many failed login attempts. Please reset your password or try again in a few minutes.';
       }
       setErrorMessage(msg);
     } finally {
@@ -202,6 +234,8 @@ export const GmailAuthGate: React.FC = () => {
                   onClick={() => {
                     setMode('login');
                     setErrorMessage(null);
+                    setPassword('');
+                    setConfirmPassword('');
                   }}
                   className={`py-2 rounded-lg transition-all cursor-pointer ${
                     mode === 'login'
@@ -216,6 +250,8 @@ export const GmailAuthGate: React.FC = () => {
                   onClick={() => {
                     setMode('signup');
                     setErrorMessage(null);
+                    setPassword('');
+                    setConfirmPassword('');
                   }}
                   className={`py-2 rounded-lg transition-all cursor-pointer ${
                     mode === 'signup'
@@ -345,7 +381,7 @@ export const GmailAuthGate: React.FC = () => {
                   <div>
                     <div className="flex justify-between items-center mb-1">
                       <label className="text-xs font-medium text-slate-300">
-                        {mode === 'login' ? 'Gmail Password' : 'Create Password'}
+                        {mode === 'login' ? 'Gmail / Account Password' : 'Create Account Password'}
                       </label>
                       {mode === 'login' && (
                         <button
@@ -374,11 +410,51 @@ export const GmailAuthGate: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-3 text-slate-400 hover:text-slate-200"
+                        className="absolute right-3 top-3 text-slate-400 hover:text-slate-200 cursor-pointer"
                       >
                         {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
                     </div>
+                    {mode === 'login' && (
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        Enter the correct password you chose when creating your email / account.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Confirm Password (Sign Up Only) */}
+                {mode === 'signup' && (
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="text-xs font-medium text-slate-300">
+                        Confirm Account Password
+                      </label>
+                    </div>
+                    <div className="relative">
+                      <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
+                      <input
+                        type={showConfirmPassword ? 'text' : 'password'}
+                        required
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        placeholder="••••••••••••"
+                        minLength={6}
+                        className="w-full pl-9 pr-10 py-2.5 rounded-xl bg-[#1A1A24] border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#5B35F5] transition"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute right-3 top-3 text-slate-400 hover:text-slate-200 cursor-pointer"
+                      >
+                        {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    {confirmPassword && password !== confirmPassword ? (
+                      <p className="text-[10px] text-rose-400 mt-1">Passwords do not match.</p>
+                    ) : confirmPassword && password === confirmPassword ? (
+                      <p className="text-[10px] text-[#00C896] mt-1">Passwords match perfectly.</p>
+                    ) : null}
                   </div>
                 )}
 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useMarketplace } from '../context/MarketplaceContext';
-import { StoreThemeSettings } from '../types';
+import { Store, StoreThemeSettings } from '../types';
 import {
   Palette,
   Layout,
@@ -14,7 +14,6 @@ import {
   Megaphone,
   ArrowLeft,
   ExternalLink,
-  Store,
   Layers,
 } from 'lucide-react';
 
@@ -37,12 +36,36 @@ const FONT_PRESETS: { name: string; value: StoreThemeSettings['fontFamily']; sam
 export const SellerThemeCustomizerPage: React.FC<{ navigate: (path: string) => void }> = ({ navigate }) => {
   const { currentUser, stores, updateStoreTheme, formatCurrency, addToast } = useMarketplace();
 
+  const fallbackStore: Store = {
+    id: `store-${currentUser?.id || 'default'}`,
+    name: `${currentUser?.name || 'My'} Store`,
+    username: currentUser?.storeUsername || 'mystore',
+    ownerId: currentUser?.id || 'owner',
+    ownerName: currentUser?.name || 'Owner',
+    logo: 'https://images.unsplash.com/photo-1512436991641-6745cdb1723f?w=200&auto=format&fit=crop&q=80',
+    banner: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=1200&auto=format&fit=crop&q=80',
+    description: 'Official digital storefront.',
+    categories: ['Fashion & Apparel'],
+    location: 'Lagos, Nigeria',
+    state: 'Lagos',
+    rating: 5.0,
+    reviewCount: 0,
+    followerCount: 0,
+    isVerified: true,
+    joinedDate: 'Recently',
+    responseTime: '< 15 mins',
+    operatingHours: 'Mon - Sat, 8:00 AM - 7:00 PM',
+    policies: { shipping: 'Standard dispatch', returns: '7 days', cancellation: 'Allowed before dispatch' },
+    productCount: 0,
+    serviceCount: 0,
+  };
+
   const userStore =
     stores.find(
       (s) =>
         (currentUser?.id && s.ownerId === currentUser.id) ||
         (currentUser?.storeUsername && s.username === currentUser.storeUsername)
-    );
+    ) || fallbackStore;
 
   const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop');
 

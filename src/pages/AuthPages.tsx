@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useMarketplace } from '../context/MarketplaceContext';
-import { Lock, Mail, User as UserIcon, Phone, CheckCircle2, ArrowRight, AlertCircle, Loader2 } from 'lucide-react';
+import { Lock, Mail, User as UserIcon, Phone, CheckCircle2, ArrowRight, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react';
 
 interface AuthPagesProps {
   mode: 'login' | 'signup' | 'forgot';
@@ -8,13 +8,16 @@ interface AuthPagesProps {
 }
 
 export const AuthPages: React.FC<AuthPagesProps> = ({ mode, navigate }) => {
-  const { signInWithGoogle, signInWithEmail, signUpWithEmail, addToast } = useMarketplace();
+  const { signInWithGoogle, signInWithEmail, signUpWithEmail, sendPasswordReset, addToast } = useMarketplace();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [name, setName] = useState('');
   const [isSellerAccount, setIsSellerAccount] = useState(false);
   const [storeName, setStoreName] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [sentReset, setSentReset] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -42,21 +45,57 @@ export const AuthPages: React.FC<AuthPagesProps> = ({ mode, navigate }) => {
     e.preventDefault();
     setErrorMessage(null);
 
-    if (mode === 'forgot') {
-      setSentReset(true);
-      addToast('info', 'Reset Sent', 'Password reset instructions sent to your email.');
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) {
+      setErrorMessage('Please enter your email address.');
       return;
+    }
+
+    if (mode === 'forgot') {
+      setIsLoading(true);
+      try {
+        await sendPasswordReset(cleanEmail);
+        setSentReset(true);
+        addToast('info', 'Reset Sent', `Password reset instructions sent to ${cleanEmail}`);
+      } catch (err: any) {
+        console.error(err);
+        setErrorMessage(err.message || 'Failed to send password reset email.');
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
+
+    if (!password) {
+      setErrorMessage('Please enter your password.');
+      return;
+    }
+
+    if (password.length < 6) {
+      setErrorMessage('Password must be at least 6 characters long.');
+      return;
+    }
+
+    if (mode === 'signup') {
+      if (!name.trim()) {
+        setErrorMessage('Please enter your full name.');
+        return;
+      }
+      if (password !== confirmPassword) {
+        setErrorMessage('Passwords do not match. Please ensure both passwords match.');
+        return;
+      }
     }
 
     setIsLoading(true);
     try {
       if (mode === 'login') {
-        await signInWithEmail(email.trim(), password);
+        await signInWithEmail(cleanEmail, password);
         addToast('success', 'Welcome Back', 'Successfully signed in to SHOPZA.');
         navigate('/');
       } else {
         await signUpWithEmail(
-          email.trim(),
+          cleanEmail,
           password,
           name.trim() || 'New Merchant',
           isSellerAccount,
@@ -68,10 +107,25 @@ export const AuthPages: React.FC<AuthPagesProps> = ({ mode, navigate }) => {
     } catch (err: any) {
       console.error(err);
       let msg = err.message || 'Authentication failed.';
-      if (msg.includes('user-not-found') || msg.includes('wrong-password') || msg.includes('invalid-credential')) {
-        msg = 'Invalid email or password.';
-      } else if (msg.includes('email-already-in-use')) {
-        msg = 'An account with this email already exists.';
+      const code = err.code || '';
+      if (
+        code.includes('invalid-credential') ||
+        code.includes('wrong-password') ||
+        msg.includes('invalid-credential') ||
+        msg.includes('wrong-password') ||
+        msg.includes('invalid-login-credentials')
+      ) {
+        msg = 'Incorrect password or email. Please enter the exact password you used when creating your account.';
+      } else if (code.includes('user-not-found') || msg.includes('user-not-found')) {
+        msg = 'No account found with this email. Please click "Sign up free" below to register.';
+      } else if (code.includes('email-already-in-use') || msg.includes('email-already-in-use')) {
+        msg = 'An account with this email already exists. Please sign in with your password.';
+      } else if (code.includes('weak-password') || msg.includes('weak-password')) {
+        msg = 'Password should be at least 6 characters long.';
+      } else if (code.includes('invalid-email') || msg.includes('invalid-email')) {
+        msg = 'Please enter a valid email address.';
+      } else if (code.includes('too-many-requests') || msg.includes('too-many-requests')) {
+        msg = 'Too many failed login attempts. Please try again later.';
       }
       setErrorMessage(msg);
     } finally {
@@ -195,26 +249,71 @@ export const AuthPages: React.FC<AuthPagesProps> = ({ mode, navigate }) => {
             {mode !== 'forgot' && (
               <div>
                 <div className="flex justify-between items-center mb-1">
-                  <label className="text-xs font-medium text-slate-300">Password</label>
+                  <label className="text-xs font-medium text-slate-300">
+                    {mode === 'login' ? 'Password' : 'Create Password'}
+                  </label>
                   {mode === 'login' && (
                     <button
                       type="button"
                       onClick={() => navigate('/forgot-password')}
-                      className="text-[11px] text-[#7C4DFF] hover:underline"
+                      className="text-[11px] text-[#7C4DFF] hover:underline cursor-pointer"
                     >
                       Forgot?
                     </button>
                   )}
                 </div>
-                <input
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••••••"
-                  minLength={6}
-                  className="w-full rounded-xl bg-[#1A1A24] border border-white/10 p-2.5 text-xs text-white focus:outline-none focus:border-[#5B35F5]"
-                />
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••••••"
+                    minLength={6}
+                    className="w-full rounded-xl bg-[#1A1A24] border border-white/10 p-2.5 pr-10 text-xs text-white focus:outline-none focus:border-[#5B35F5]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-200 cursor-pointer"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                {mode === 'login' && (
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Enter the exact password you used when creating your account.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {mode === 'signup' && (
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1">Confirm Password</label>
+                <div className="relative">
+                  <input
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    required
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="••••••••••••"
+                    minLength={6}
+                    className="w-full rounded-xl bg-[#1A1A24] border border-white/10 p-2.5 pr-10 text-xs text-white focus:outline-none focus:border-[#5B35F5]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-200 cursor-pointer"
+                  >
+                    {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                {confirmPassword && password !== confirmPassword ? (
+                  <p className="text-[10px] text-rose-400 mt-1">Passwords do not match.</p>
+                ) : confirmPassword && password === confirmPassword ? (
+                  <p className="text-[10px] text-[#00C896] mt-1">Passwords match.</p>
+                ) : null}
               </div>
             )}
 

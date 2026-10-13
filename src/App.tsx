@@ -62,6 +62,7 @@ const MarketplaceApp: React.FC = () => {
     authLoading,
     authModalOpen,
     setAuthModalOpen,
+    authModalMode,
     currentPath,
     navigate,
   } = useMarketplace();
@@ -367,8 +368,11 @@ const MarketplaceApp: React.FC = () => {
       {/* Toast Notifications */}
       <ToastContainer />
 
-      {/* Global Gmail / Firebase Authentication Modal */}
-      <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} />
+      <AuthModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        initialMode={authModalMode}
+      />
 
       {/* Non-intrusive Offline Indicator */}
       <OfflineIndicator />

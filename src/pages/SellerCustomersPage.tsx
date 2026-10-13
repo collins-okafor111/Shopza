@@ -70,7 +70,7 @@ export const SellerCustomersPage: React.FC<{ navigate: (path: string) => void }>
     }
 
     addCustomer({
-      storeId: userStore.id,
+      storeId: userStore?.id || 'store-default',
       name: name.trim(),
       email: email.trim(),
       phone: phone.trim() || undefined,

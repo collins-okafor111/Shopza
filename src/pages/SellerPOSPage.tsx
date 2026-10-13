@@ -103,16 +103,16 @@ export const SellerPOSPage: React.FC<{ navigate: (path: string) => void }> = ({ 
     }
 
     const order = completePOSSale({
-      storeId: userStore.id,
+      storeId: userStore?.id || `store-${currentUser?.id || 'pos'}`,
       items: cart.map((c) => ({
         productId: c.product.id,
         title: c.product.title,
         price: c.product.price,
         quantity: c.quantity,
         image: c.product.images[0],
-        sellerId: userStore.ownerId,
-        storeUsername: userStore.username,
-        sellerName: userStore.name,
+        sellerId: userStore?.ownerId || currentUser?.id || 'seller',
+        storeUsername: userStore?.username || currentUser?.storeUsername || 'store',
+        sellerName: userStore?.name || currentUser?.name || 'Retail Register',
       })),
       total,
       paymentMethod,
@@ -142,7 +142,7 @@ export const SellerPOSPage: React.FC<{ navigate: (path: string) => void }> = ({ 
                 Retail Register
               </span>
             </div>
-            <p className="text-[11px] text-slate-400">Terminal: {userStore.name} · Staff: {currentUser?.name || 'Store Owner'}</p>
+            <p className="text-[11px] text-slate-400">Terminal: {userStore?.name || 'Retail Register'} · Staff: {currentUser?.name || 'Store Owner'}</p>
           </div>
         </div>
 
@@ -377,7 +377,7 @@ export const SellerPOSPage: React.FC<{ navigate: (path: string) => void }> = ({ 
 
             <div className="text-center pb-3 border-b border-dashed border-slate-300">
               <h2 className="font-display font-extrabold text-xl tracking-tight text-slate-950 uppercase">
-                {userStore.name}
+                {userStore?.name || 'Retail Register'}
               </h2>
               <p className="text-[11px] text-slate-500">Official Retail Register Receipt</p>
               <p className="text-[10px] text-slate-400 font-mono mt-1">Receipt #: {completedOrder.orderNumber}</p>
