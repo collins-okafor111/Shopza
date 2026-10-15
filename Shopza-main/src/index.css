@@ -1,0 +1,77 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-display: 'Syne', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+
+    --brand-primary: #245BFF;
+    --brand-secondary: #7C3AED;
+    --brand-accent: #7C3AED;
+    --brand-dark: #FFFFFF;
+    --brand-card: #FFFFFF;
+    --brand-surface: #F7F8FC;
+    --brand-border: rgba(15, 23, 42, 0.10);
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: var(--brand-dark);
+    color: #172033;
+    overflow-x: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  h1, h2, h3, .font-display {
+    font-family: var(--font-display);
+  }
+
+  .font-mono-nums {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #F1F4FA;
+}
+::-webkit-scrollbar-thumb {
+  background: #B8C3D6;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #245BFF;
+}
+
+/* Safe areas for mobile PWA */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 16px);
+}
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-delay: -1ms !important;
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    background-attachment: initial !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0s !important;
+    transition-delay: 0s !important;
+  }
+}
+
+/* Shopza light marketplace theme */
+:root { color-scheme: light; }
+body { background: #ffffff !important; color: #172033 !important; }
+input, textarea, select { color: #172033; }
+::selection { background: rgba(36,91,255,.18); color: #172033; }
