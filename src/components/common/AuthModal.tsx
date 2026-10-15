@@ -49,11 +49,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       addToast('success', 'Signed In', 'Welcome to SHOPZA!');
       onClose();
     } catch (err: any) {
-      console.error('Google Sign-In Error:', err);
+      if (err?.code !== 'auth/popup-closed-by-user' && !err?.message?.includes('popup-closed-by-user')) {
+        console.warn('Google Sign-In notice:', err?.message || err);
+      }
       setErrorMessage(
-        err.message?.includes('popup-closed-by-user')
-          ? 'Sign-in window was closed. Please try again.'
-          : err.message || 'Unable to authenticate with Google.'
+        err?.code === 'auth/popup-closed-by-user' || err?.message?.includes('popup-closed-by-user')
+          ? 'Sign-in window was closed. Please try again or sign in with your email below.'
+          : err?.message || 'Unable to authenticate with Google.'
       );
     } finally {
       setIsLoading(false);
@@ -103,7 +105,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       }
       onClose();
     } catch (err: any) {
-      console.error('Email Auth Error:', err);
+      console.warn('Email Auth notice:', err?.code || err?.message || err);
       let msg = err.message || 'Authentication failed. Please verify your credentials.';
       const code = err.code || '';
       if (

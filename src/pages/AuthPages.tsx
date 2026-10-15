@@ -30,11 +30,13 @@ export const AuthPages: React.FC<AuthPagesProps> = ({ mode, navigate }) => {
       addToast('success', 'Signed In', 'Welcome to SHOPZA!');
       navigate('/');
     } catch (err: any) {
-      console.error(err);
+      if (err?.code !== 'auth/popup-closed-by-user' && !err?.message?.includes('popup-closed-by-user')) {
+        console.warn('Google auth notice:', err?.message || err);
+      }
       setErrorMessage(
-        err.message?.includes('popup-closed-by-user')
-          ? 'Sign-in window closed. Please try again.'
-          : err.message || 'Failed to authenticate with Google.'
+        err?.code === 'auth/popup-closed-by-user' || err?.message?.includes('popup-closed-by-user')
+          ? 'Sign-in window closed. Please try again or use your password below.'
+          : err?.message || 'Failed to authenticate with Google.'
       );
     } finally {
       setIsLoading(false);
@@ -58,8 +60,8 @@ export const AuthPages: React.FC<AuthPagesProps> = ({ mode, navigate }) => {
         setSentReset(true);
         addToast('info', 'Reset Sent', `Password reset instructions sent to ${cleanEmail}`);
       } catch (err: any) {
-        console.error(err);
-        setErrorMessage(err.message || 'Failed to send password reset email.');
+        console.warn('Password reset notice:', err?.message || err);
+        setErrorMessage(err?.message || 'Failed to send password reset email.');
       } finally {
         setIsLoading(false);
       }
@@ -105,7 +107,7 @@ export const AuthPages: React.FC<AuthPagesProps> = ({ mode, navigate }) => {
         navigate(isSellerAccount ? '/seller/dashboard' : '/');
       }
     } catch (err: any) {
-      console.error(err);
+      console.warn('Auth error notice:', err?.code || err?.message || err);
       let msg = err.message || 'Authentication failed.';
       const code = err.code || '';
       if (

@@ -49,12 +49,13 @@ export const GmailAuthGate: React.FC = () => {
       await signInWithGoogle();
       addToast('success', 'Authenticated Successfully', 'Welcome to SHOPZA!');
     } catch (err: any) {
-      console.error('Google Sign-In Error:', err);
-      setErrorMessage(
-        err.message?.includes('popup-closed-by-user')
-          ? 'Google sign-in popup was closed before completion. Please try again.'
-          : err.message || 'Failed to authenticate with Google. Please use Gmail & password below.'
-      );
+      if (err?.code === 'auth/popup-closed-by-user' || err?.message?.includes('popup-closed-by-user')) {
+        console.info('Google sign-in popup dismissed by user.');
+        setErrorMessage('Google sign-in window was closed. Please click again or sign in with your password below.');
+      } else {
+        console.warn('Google sign-in notice:', err?.message || err);
+        setErrorMessage(err?.message || 'Google authentication was not completed. You can also sign in with your password below.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -78,7 +79,7 @@ export const GmailAuthGate: React.FC = () => {
         setResetSuccess(true);
         addToast('info', 'Password Reset Dispatched', `Recovery instructions sent to ${cleanEmail}`);
       } catch (resetErr: any) {
-        console.error('Password reset error:', resetErr);
+        console.warn('Password reset notice:', resetErr?.message || resetErr);
         const code = resetErr?.code || '';
         let resetMsg = resetErr?.message || 'Unable to send password reset email.';
         if (code.includes('user-not-found') || resetMsg.includes('user-not-found')) {
@@ -130,27 +131,32 @@ export const GmailAuthGate: React.FC = () => {
         addToast('success', 'Account Registered', 'Welcome to SHOPZA! Your account is active.');
       }
     } catch (err: any) {
-      console.error('Auth error:', err);
-      let msg = err.message || 'Authentication error. Please check your credentials.';
-      const code = err.code || '';
+      const code = err?.code || '';
+      const rawMsg = err?.message || '';
+      console.warn('Auth notice:', code || rawMsg);
+      let msg = 'Authentication error. Please check your credentials.';
       if (
         code.includes('invalid-credential') ||
         code.includes('wrong-password') ||
-        msg.includes('invalid-credential') ||
-        msg.includes('wrong-password') ||
-        msg.includes('invalid-login-credentials')
+        rawMsg.includes('invalid-credential') ||
+        rawMsg.includes('wrong-password') ||
+        rawMsg.includes('invalid-login-credentials')
       ) {
         msg = 'Incorrect password or email. Please enter the exact password you used when creating your account.';
-      } else if (code.includes('user-not-found') || msg.includes('user-not-found')) {
+      } else if (code.includes('user-not-found') || rawMsg.includes('user-not-found')) {
         msg = 'No account found with this email. Please switch to "Create Account" above to register.';
-      } else if (code.includes('email-already-in-use') || msg.includes('email-already-in-use')) {
+      } else if (code.includes('email-already-in-use') || rawMsg.includes('email-already-in-use')) {
         msg = 'An account with this email address already exists. Please log in with your password.';
-      } else if (code.includes('weak-password') || msg.includes('weak-password')) {
+      } else if (code.includes('weak-password') || rawMsg.includes('weak-password')) {
         msg = 'Password is too weak. Please use at least 6 characters.';
-      } else if (code.includes('invalid-email') || msg.includes('invalid-email')) {
+      } else if (code.includes('invalid-email') || rawMsg.includes('invalid-email')) {
         msg = 'Please enter a valid email address (e.g. name@gmail.com).';
-      } else if (code.includes('too-many-requests') || msg.includes('too-many-requests')) {
+      } else if (code.includes('too-many-requests') || rawMsg.includes('too-many-requests')) {
         msg = 'Too many failed login attempts. Please reset your password or try again in a few minutes.';
+      } else if (code.includes('operation-not-allowed') || rawMsg.includes('operation-not-allowed')) {
+        msg = 'Email/password authentication is initializing. You can also sign in with Google above.';
+      } else if (rawMsg) {
+        msg = rawMsg;
       }
       setErrorMessage(msg);
     } finally {

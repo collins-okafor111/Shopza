@@ -88,7 +88,7 @@ export const SellerOnboardingPage: React.FC<SellerOnboardingPageProps> = ({ navi
       });
       navigate('/seller/dashboard');
     } catch (err) {
-      console.error('Failed to launch store:', err);
+      console.warn('Failed to launch store notice:', err);
     } finally {
       setSubmitting(false);
     }
